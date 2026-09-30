@@ -1,20 +1,11 @@
 # GI_bleed
 
-Code for multi-phase CT GI-bleed preprocessing (registration, slice export, TotalSegmentator GI occupancy, optional windowed cache).
+## processing
 
-## Layout
-
-```
-code/                     # main preprocessing package (run from here)
-  run_preprocess.py
-  register_and_cache.py
-  ...
-```
-
-## Quick start
+Multi-phase CT GI-bleed processing code: registration, slice export, TotalSegmentator GI occupancy, optional windowed cache.
 
 ```bash
-cd code
+cd processing
 pip install -r requirements.txt
 # optional GPU segmentation
 pip install -r requirements-seg.txt
@@ -25,4 +16,4 @@ python run_preprocess.py \
   --out_root /path/to/out
 ```
 
-See `code/README.md` for input layout, series.csv schema, and full pipeline details.
+See `processing/README.md` for input layout, series.csv schema, and full pipeline details.
