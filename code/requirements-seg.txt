@@ -1,0 +1,3 @@
+# Separate from requirements.txt. TotalSegmentator pulls nnU-Net and its weights.
+# Install into the same environment before running segment.py.
+totalsegmentator
