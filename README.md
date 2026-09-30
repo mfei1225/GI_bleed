@@ -9,7 +9,6 @@ code/                     # main preprocessing package (run from here)
   run_preprocess.py
   register_and_cache.py
   ...
-  legacy_label_map/       # older variant that supports --label_phase_map
 ```
 
 ## Quick start
