@@ -5,9 +5,11 @@ This folder scores a study that has already been through `preprocessing`. It wri
 The weights are included:
 
 ```
-weights/maxvit/      five MaxViT folds, about 120 MB each
-weights/detector/    five Faster R-CNN folds, about 470 MB each
+weights/maxvit/maxvit_fold0.pth … maxvit_fold4.pth
+weights/detector/detector_fold0.pth … detector_fold4.pth
 ```
+
+Inference loads every `*.pth` in each folder in sorted order (fold 0–4).
 
 ```bash
 pip install -r requirements.txt
