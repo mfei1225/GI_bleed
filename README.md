@@ -39,7 +39,7 @@ raw multiphase CT
 cd preprocessing && pip install -r requirements.txt
 python run_preprocess.py --image_root ... --series_csv ... --out_root /data/site/preprocessed
 
-# 2) infer (GPU; weights ship under inference/weights/)
+# 2) infer (GPU; place checkpoints in inference/weights/)
 cd ../inference && pip install -r requirements.txt
 python infer.py --data /data/site/preprocessed --out /data/site/scores_slices.csv
 

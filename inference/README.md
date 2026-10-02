@@ -2,7 +2,7 @@
 
 This folder scores a study that has already been through `preprocessing`. It writes one row per slice. Patient scores are computed by `aggregation`. It does not register, segment, or train.
 
-The weights are included:
+The checkpoints are not in git. Put them here before running:
 
 ```
 weights/maxvit/maxvit_fold0.pth … maxvit_fold4.pth      (~117 MB each)
