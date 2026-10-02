@@ -5,8 +5,8 @@ This folder scores a study that has already been through `preprocessing`. It wri
 The weights are included:
 
 ```
-weights/maxvit/maxvit_fold0.pth … maxvit_fold4.pth
-weights/detector/detector_fold0.pth … detector_fold4.pth
+weights/maxvit/maxvit_fold0.pth … maxvit_fold4.pth      (~117 MB each)
+weights/detector/detector_fold0.pth … detector_fold4.pth (~466 MB each)
 ```
 
 Inference loads every `*.pth` in each folder in sorted order (fold 0–4).
@@ -75,7 +75,7 @@ Preprocess first, then:
 ```bash
 python infer.py \
   --data /data/site/preprocessed \
-  --out /data/site/scores_slices.csv
+  --out /data/site/results
 ```
 
 The weights next to this script are used unless you pass `--weights` pointing at a folder that contains `maxvit/` and `detector/`. Pass `--subjects` to score a few ids.
@@ -97,7 +97,17 @@ If the process runs out of GPU memory, lower `--batch` or `--detector-batch`. `-
 
 ## Output
 
-`scores_slices.csv`, one row per scored slice:
+`--out` is one folder:
+
+```
+results/
+  slices.csv
+  boxes.csv
+```
+
+`aggregation` reads that folder and adds `scores.csv`.
+
+`slices.csv`, one row per scored slice:
 
 | Column | Meaning |
 |---|---|
@@ -108,7 +118,7 @@ If the process runs out of GPU memory, lower `--batch` or `--detector-batch`. `-
 | `maxvit_prob` | Fold-averaged MaxViT extravasation probability |
 | `detector_score` | Fold-averaged highest box score on that slice |
 
-`scores_slices_boxes.csv` (same folder, `_boxes` added to the file name) has one row per detection:
+`boxes.csv` has one row per detection:
 
 | Column | Meaning |
 |---|---|
@@ -120,4 +130,4 @@ If the process runs out of GPU memory, lower `--batch` or `--detector-batch`. `-
 
 The corners are on the original slice, after undoing the body crop and the resize to 512. `x` runs across the image and `y` runs down it, the same axes as the DICOM pixel array.
 
-Pass `scores_slices.csv` to `aggregation` to get one score per study. The box file is not an input to aggregation.
+Pass this folder to `aggregation`. It reads `slices.csv` and writes `scores.csv` beside it. `boxes.csv` is not used for the patient score.

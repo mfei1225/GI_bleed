@@ -1,6 +1,6 @@
 """Score slices with the MaxViT and the detector. Writes one row per slice.
 
-    python infer.py --data /data/site/preprocessed --out /data/site/scores_slices.csv
+    python infer.py --data /data/site/preprocessed --out /data/site/results
 
 MaxViT reads volcache/s512. The detector reads slices/. Both are produced by
 preprocessing. Which slices count toward the patient score is decided
@@ -149,7 +149,7 @@ def _run_detector(data, studies, ckpts, device, stride, batch, amp):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--data", required=True, help="preprocessing output folder")
-    p.add_argument("--out", required=True, help="Slice score CSV")
+    p.add_argument("--out", required=True, help="Folder for slices.csv and boxes.csv")
     p.add_argument("--weights", default=str(ROOT / "weights"), help="Folder with maxvit/ and detector/")
     p.add_argument("--subjects", nargs="*", default=None)
     p.add_argument("--batch", type=int, default=8, help="MaxViT slices per forward")
@@ -198,9 +198,10 @@ def main():
     else:
         detector, boxes = {}, []
 
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    box_path = out_path.with_name(out_path.stem + "_boxes.csv")
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "slices.csv"
+    box_path = out_dir / "boxes.csv"
     n_rows = 0
     with out_path.open("w", newline="") as f:
         writer = csv.DictWriter(
