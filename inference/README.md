@@ -2,7 +2,23 @@
 
 This folder scores a study that has already been through `preprocessing`. It writes one row per slice. Patient scores are computed by `aggregation`. It does not register, segment, or train.
 
-The checkpoints are not in git. Put them here before running:
+The checkpoints are not in git. They are in the private repo [mfei1225/gi-bleed-weights](https://huggingface.co/mfei1225/gi-bleed-weights). Ask for access, log in, then download them into this folder:
+
+```bash
+huggingface-cli login
+pip install "huggingface_hub>=0.15"
+python - <<'PY'
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id="mfei1225/gi-bleed-weights",
+    repo_type="model",
+    local_dir="weights",
+    local_dir_use_symlinks=False,
+)
+PY
+```
+
+That produces:
 
 ```
 weights/maxvit/maxvit_fold0.pth … maxvit_fold4.pth      (~117 MB each)

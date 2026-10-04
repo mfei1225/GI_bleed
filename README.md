@@ -39,7 +39,7 @@ raw multiphase CT
 cd preprocessing && pip install -r requirements.txt
 python run_preprocess.py --image_root ... --series_csv ... --out_root /data/site/preprocessed
 
-# 2) infer (GPU; place checkpoints in inference/weights/)
+# 2) infer (GPU). Checkpoints are not in git; download them first (see below).
 cd ../inference && pip install -r requirements.txt
 python infer.py --data /data/site/preprocessed --out /data/site/scores_slices.csv
 
@@ -52,3 +52,23 @@ python aggregate.py \
 ```
 
 See each folder’s `README.md` for inputs, flags, and output columns.
+
+## Weights
+
+Checkpoints live in a private Hugging Face repo: [mfei1225/gi-bleed-weights](https://huggingface.co/mfei1225/gi-bleed-weights). Ask for access, then from this directory:
+
+```bash
+huggingface-cli login
+pip install "huggingface_hub>=0.15"
+python - <<'PY'
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id="mfei1225/gi-bleed-weights",
+    repo_type="model",
+    local_dir="inference/weights",
+    local_dir_use_symlinks=False,
+)
+PY
+```
+
+That writes `inference/weights/maxvit/` and `inference/weights/detector/`, which is where `infer.py` looks.
