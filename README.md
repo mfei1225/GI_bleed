@@ -55,10 +55,9 @@ See each folder’s `README.md` for inputs, flags, and output columns.
 
 ## Weights
 
-Checkpoints live in a private Hugging Face repo: [mfei1225/gi-bleed-weights](https://huggingface.co/mfei1225/gi-bleed-weights). Ask for access, then from this directory:
+Checkpoints are not in git. Download them from [mfei1225/gi-bleed-weights](https://huggingface.co/mfei1225/gi-bleed-weights). From this directory:
 
 ```bash
-huggingface-cli login
 pip install "huggingface_hub>=0.15"
 python - <<'PY'
 from huggingface_hub import snapshot_download
