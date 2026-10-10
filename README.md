@@ -71,3 +71,7 @@ PY
 ```
 
 That writes `inference/weights/maxvit/` and `inference/weights/detector/`, which is where `infer.py` looks.
+
+## Report labels
+
+`llm_labeling/` labels report text (injury and bleed site). It does not read images. See `llm_labeling/README.md`.
