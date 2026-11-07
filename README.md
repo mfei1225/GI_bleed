@@ -1,6 +1,15 @@
 # GI_bleed
 
-End-to-end GI-bleed CT scoring pipeline in three steps:
+End-to-end GI-bleed CT scoring pipeline in three steps. There are two versions, each with its own `preprocessing/`, `inference/`, and `aggregation/`:
+
+| Folder | Slice context | Rank blend |
+|---|---|---|
+| `native/` | adjacent slices at the series' own spacing (z−1, z, z+1) | 0.6 MaxViT / 0.4 detector |
+| `standardized/` | five slices at −2, −1, 0, +1, +2 mm | 0.7 MaxViT / 0.3 detector |
+
+Both versions still segment the venous volume and write `gi_occupancy.json`. `standardized/` preprocessing keeps the reference series grid and records each slice position in `ipp_map.json`. It does not resample the volume onto a new grid. Inference then reads the slices nearest to −2, −1, 0, +1, and +2 mm.
+
+The diagram and commands below are for `native/`. `standardized/` follows the same steps, but `aggregate.py` takes `--results` and writes `scores.csv` into that folder. See each folder's `README.md`.
 
 ```
 raw multiphase CT
@@ -36,7 +45,7 @@ raw multiphase CT
 
 ```bash
 # 1) preprocess
-cd preprocessing && pip install -r requirements.txt
+cd native/preprocessing && pip install -r requirements.txt
 python run_preprocess.py --image_root ... --series_csv ... --out_root /data/site/preprocessed
 
 # 2) infer (GPU). Checkpoints are not in git; download them first (see below).
@@ -64,13 +73,13 @@ from huggingface_hub import snapshot_download
 snapshot_download(
     repo_id="mfei1225/gi-bleed-weights",
     repo_type="model",
-    local_dir="inference/weights",
+    local_dir="native/inference/weights",
     local_dir_use_symlinks=False,
 )
 PY
 ```
 
-That writes `inference/weights/maxvit/` and `inference/weights/detector/`, which is where `infer.py` looks.
+That writes `native/inference/weights/maxvit/` and `native/inference/weights/detector/`, which is where `infer.py` looks. The `standardized/` checkpoints go in `standardized/inference/weights/`.
 
 ## Report labels
 

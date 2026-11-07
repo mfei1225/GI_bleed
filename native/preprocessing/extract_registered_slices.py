@@ -5,7 +5,7 @@ this script writes one DICOM per axial slice for each phase, so the existing MON
 LoadImaged-based data loader can consume them unchanged.
 
 Output structure:
-    /MGB-img-registered-slices/<subject>/<accession>/
+    <slice_root>/<subject>/<accession>/
         Venous/<z:04d>.dcm
         Arterial/<z:04d>.dcm
         NonCon/<z:04d>.dcm
@@ -373,6 +373,7 @@ def process_subject(args):
                         "status": "cached",
                         "nz": nz_hint,
                         "present_phases": list(present_phases),
+                        "slice_dir": str(acc_out),
                     }
 
         # Load reference first to get shape/spacing, then any other present phases.
@@ -394,6 +395,7 @@ def process_subject(args):
                 "status": "cached",
                 "nz": nz,
                 "present_phases": list(present_phases),
+                "slice_dir": str(acc_out),
             }
 
         # Axial positions: cached if possible, else derive + cache.
@@ -474,6 +476,7 @@ def process_subject(args):
             "status": "ok",
             "nz": int(nz),
             "present_phases": list(present_phases),
+            "slice_dir": str(acc_out),
         }
     except Exception as e:
         return {
@@ -602,8 +605,9 @@ def main():
 def _handle(res, out_manifest):
     if res["status"] in ("ok", "cached"):
         present = res.get("present_phases") or list(PHASES)
+        root = Path(res["slice_dir"])
         out_manifest.setdefault(res["subject"], {})[res["accession"]] = {
-            ph: str(Path(DEFAULT_SLICE_ROOT) / res["subject"] / res["accession"] / ph)
+            ph: str(root / ph)
             for ph in present
         }
 

@@ -1,0 +1,5 @@
+numpy
+pandas
+SimpleITK
+pydicom
+opencv-python-headless

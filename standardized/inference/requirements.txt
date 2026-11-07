@@ -1,0 +1,6 @@
+numpy
+torch
+torchvision
+timm>=1.0
+pydicom
+opencv-python-headless

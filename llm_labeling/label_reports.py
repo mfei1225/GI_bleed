@@ -5,10 +5,10 @@ Talks to any OpenAI-compatible chat endpoint (vLLM, Ollama, Together, OpenAI).
 
     export OPENAI_BASE_URL=http://127.0.0.1:8000/v1
     export OPENAI_API_KEY=dummy
-    python label_reports.py --input reports.csv --task injury --model llama70b --out out/injury.csv
+    python label_reports.py --input reports.csv --task injury --model "$LLM_MODEL" --out out/injury.csv
 
-Input needs a report-text column and an accession column. An Excel pull
-(``GI_Bleed_Extravasation.xlsx``) works if those headers exist.
+Input needs a report-text column and an accession column. CSV and Excel
+both work if those headers exist.
 """
 from __future__ import annotations
 
@@ -140,7 +140,7 @@ def main() -> None:
     p.add_argument("--input", required=True, help="CSV or XLSX of reports")
     p.add_argument("--out", required=True, help="Output CSV (resume-safe)")
     p.add_argument("--task", choices=("injury", "location"), default="injury")
-    p.add_argument("--model", default=os.environ.get("LLM_MODEL", "llama70b"))
+    p.add_argument("--model", default=os.environ.get("LLM_MODEL", ""), help="Model name. Or set LLM_MODEL.")
     p.add_argument("--text-col", default="")
     p.add_argument("--acc-col", default="")
     p.add_argument("--mrn-col", default="")
@@ -150,6 +150,8 @@ def main() -> None:
     p.add_argument("--base-url", default=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"))
     p.add_argument("--api-key", default=os.environ.get("OPENAI_API_KEY", ""))
     args = p.parse_args()
+    if not args.model:
+        raise SystemExit("Pass --model or set LLM_MODEL")
 
     src = _load_table(Path(args.input))
     text_c = args.text_col or _pick(src, TEXT_CANDIDATES)

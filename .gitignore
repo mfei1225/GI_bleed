@@ -14,4 +14,4 @@ cache/
 data/
 outputs/
 venv/
-inference/weights.zip
+native/inference/weights.zip

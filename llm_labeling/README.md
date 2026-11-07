@@ -30,7 +30,7 @@ CSV or Excel with at least:
 - accession (`Accession Number`, `Accession`, `acc`)
 - optional MRN (`Patient MRN`, `MRN`)
 
-The MGB pull `GI_Bleed_Extravasation.xlsx` works as `--input`.
+Any CSV or Excel file with those columns works as `--input`.
 
 ## How to run it
 
@@ -43,7 +43,7 @@ export OPENAI_API_KEY=dummy
 python label_reports.py \
   --input /data/site/reports.xlsx \
   --task injury \
-  --model meta-llama/Llama-3.3-70B-Instruct \
+  --model "$LLM_MODEL" \
   --out /data/site/llm_injury.csv
 ```
 
@@ -53,7 +53,7 @@ Then sites. If the input has an `Extravasation` column, only `Yes` rows are sent
 python label_reports.py \
   --input /data/site/llm_injury.csv \
   --task location \
-  --model meta-llama/Llama-3.3-70B-Instruct \
+  --model "$LLM_MODEL" \
   --out /data/site/llm_location.csv
 ```
 
