@@ -17,7 +17,9 @@ Writes <out>/gi_occupancy.json:
       }
     }
 
-z in gi_z matches the slice filename index (0000.dcm is z=0).
+z in gi_z matches the slice filename index (0000.dcm is z=0). A mask whose
+grid is coarser than Venous.nii.gz is resampled onto that volume first, so
+the slice index is the venous slice and not the segmentation's own index.
 """
 from __future__ import annotations
 
@@ -31,18 +33,47 @@ GI_ORGANS = ("colon", "small_bowel", "duodenum", "stomach", "esophagus")
 GI_VOXEL_MIN = 50
 
 
-def _gi_z(seg_dir: Path, nz: int) -> list[int] | None:
+def _reference(path: Path):
+    reader = sitk.ImageFileReader()
+    reader.SetFileName(str(path))
+    reader.ReadImageInformation()
+    img = sitk.Image(reader.GetSize(), sitk.sitkUInt8)
+    img.SetOrigin(reader.GetOrigin())
+    img.SetSpacing(reader.GetSpacing())
+    img.SetDirection(reader.GetDirection())
+    return img
+
+
+def _on_reference(mask: sitk.Image, ref: sitk.Image) -> sitk.Image:
+    """Resample a coarser TotalSegmentator mask onto the venous slice grid."""
+    same = (
+        mask.GetSize() == ref.GetSize()
+        and all(abs(a - b) <= 1e-3 for a, b in zip(mask.GetSpacing(), ref.GetSpacing()))
+        and all(abs(a - b) <= 1e-3 for a, b in zip(mask.GetOrigin(), ref.GetOrigin()))
+        and all(abs(a - b) <= 1e-5 for a, b in zip(mask.GetDirection(), ref.GetDirection()))
+    )
+    if same:
+        return mask
+    filt = sitk.ResampleImageFilter()
+    filt.SetReferenceImage(ref)
+    filt.SetInterpolator(sitk.sitkNearestNeighbor)
+    filt.SetDefaultPixelValue(0)
+    return filt.Execute(mask)
+
+
+def _gi_z(seg_dir: Path, ref: sitk.Image) -> list[int] | None:
     import numpy as np
 
-    gi = np.zeros(int(nz), dtype=bool)
+    nz = int(ref.GetSize()[2])
+    gi = np.zeros(nz, dtype=bool)
     n_ok = 0
     for organ in GI_ORGANS:
         path = seg_dir / f"{organ}.nii.gz"
         if not path.is_file() or path.stat().st_size == 0:
             continue
-        arr = sitk.GetArrayFromImage(sitk.ReadImage(str(path)))
+        arr = sitk.GetArrayFromImage(_on_reference(sitk.ReadImage(str(path)), ref))
         n_ok += 1
-        use = min(int(nz), arr.shape[0])
+        use = min(nz, arr.shape[0])
         counts = arr[:use].reshape(use, -1).sum(axis=1)
         gi[:use] |= counts >= GI_VOXEL_MIN
     if n_ok == 0:
@@ -71,8 +102,9 @@ def main():
             if not seg_dir.is_dir():
                 n_miss += 1
                 continue
-            nz = int(sitk.ReadImage(str(nii)).GetSize()[2])
-            zs = _gi_z(seg_dir, nz)
+            ref = _reference(nii)
+            nz = int(ref.GetSize()[2])
+            zs = _gi_z(seg_dir, ref)
             if zs is None:
                 n_miss += 1
                 continue

@@ -1,9 +1,10 @@
 """Score slices with the MaxViT and the detector. Writes one row per slice.
 
-    python infer.py --data /data/site/preprocessed --out /data/site/results
+    python infer.py --data /data/site/preprocessed --weights /data/site/weights --out /data/site/results
 
 MaxViT reads volcache/s512. The detector reads slices/. Both are produced by
-preprocessing. Which slices count toward the patient score is decided
+preprocessing. Each model sees five slices at −2, −1, 0, +1, +2 mm,
+using ipp_map.json. Which slices count toward the patient score is decided
 later, in aggregation.
 
 On a GPU, raise --batch and --detector-batch until memory is full. --stride 2
@@ -19,11 +20,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from detector import detect_batch, load_detector, load_phase_slices, slice_tensor
+from detector import OFFSETS, axial_mm, detect_batch, load_detector, load_phase_slices, neighbor_z, slice_tensor
 from model import load_bleed_model
 
 PHASES = ("Venous", "NonCon", "Arterial")
-ROOT = Path(__file__).resolve().parent
 
 
 def _studies(data: Path) -> list[tuple[str, str]]:
@@ -58,7 +58,7 @@ def _forward(model, x, device, amp: bool):
         return model(x).float().cpu().numpy()
 
 
-def _ncdiff(vols, z: int) -> np.ndarray:
+def _ncdiff_at(vols, z: int) -> np.ndarray:
     v = np.asarray(vols["Venous"][z], dtype=np.float32) / 255.0
     nc = vols["NonCon"]
     art = vols["Arterial"]
@@ -66,13 +66,20 @@ def _ncdiff(vols, z: int) -> np.ndarray:
         vnc = np.zeros_like(v)
         anc = np.zeros_like(v)
     else:
-        nc_z = np.asarray(nc[z], dtype=np.float32) / 255.0
+        nc_z = np.asarray(nc[min(z, nc.shape[0] - 1)], dtype=np.float32) / 255.0
         vnc = np.clip((v - nc_z) * 0.5 + 0.5, 0.0, 1.0)
         if art is None:
             anc = np.zeros_like(v)
         else:
-            anc = np.clip((np.asarray(art[z], dtype=np.float32) / 255.0 - nc_z) * 0.5 + 0.5, 0.0, 1.0)
+            anc = np.clip((np.asarray(art[min(z, art.shape[0] - 1)], dtype=np.float32) / 255.0 - nc_z) * 0.5 + 0.5, 0.0, 1.0)
     return np.stack([vnc, v, anc], axis=0)
+
+
+def _ncdiff(vols, z: int, axial) -> np.ndarray:
+    """Five difference views at −2..+2 mm, concatenated on the channel axis."""
+    nz = int(vols["Venous"].shape[0])
+    views = [_ncdiff_at(vols, neighbor_z(axial, z, dz, nz)) for dz in OFFSETS]
+    return np.concatenate(views, axis=0)
 
 
 def _load_cache(data: Path, sid: str, acc: str):
@@ -92,12 +99,13 @@ def _run_maxvit(data, studies, ckpts, device, stride, batch, amp):
         print(f"[maxvit] {ck.name}", flush=True)
         for sid, acc in studies:
             vols = _load_cache(data, sid, acc)
+            axial = axial_mm(data / "slices" / sid / acc)
             nz = int(vols["Venous"].shape[0])
             nz_of[(sid, acc)] = nz
             zs = list(range(0, nz, stride))
             for start in range(0, len(zs), batch):
                 batch_z = zs[start : start + batch]
-                x = torch.from_numpy(np.stack([_ncdiff(vols, z) for z in batch_z])).to(device)
+                x = torch.from_numpy(np.stack([_ncdiff(vols, z, axial) for z in batch_z])).to(device)
                 prob = _forward(model, x, device, amp)
                 for z, pr in zip(batch_z, prob):
                     key = (sid, acc, int(z))
@@ -122,27 +130,28 @@ def _run_detector(data, studies, ckpts, device, stride, batch, amp):
         for sid, acc in studies:
             root = data / "slices" / sid / acc
             vols = {phase: load_phase_slices(root / phase) for phase in PHASES}
+            axial = axial_mm(root)
             nz = len(vols["Venous"])
             nz_of[(sid, acc)] = nz
             zs = list(range(0, nz, stride))
             for start in range(0, len(zs), batch):
                 chunk = zs[start : start + batch]
-                prepared = [slice_tensor(vols, z) for z in chunk]
+                prepared = [slice_tensor(vols, z, axial) for z in chunk]
                 founds = detect_batch(
                     model, [t for t, _ in prepared], [g for _, g in prepared], device, amp
                 )
                 for z, found in zip(chunk, founds):
                     key = (sid, acc, int(z))
-                    totals[key] = totals.get(key, 0.0) + (max(d["score"] for d in found) if found else 0.0)
+                    slice_max = max(d["score"] for d in found) if found else 0.0
+                    totals[key] = max(totals.get(key, 0.0), slice_max)
                     for det in found:
                         boxes.append({"Subject": sid, "Accession": acc, "z": int(z), "fold": fold, **det})
         del model
         if device.type == "cuda":
             torch.cuda.empty_cache()
-    nfold = float(len(ckpts))
     by_study = {}
-    for (sid, acc, z), total in totals.items():
-        by_study.setdefault((sid, acc), []).append((z, total / nfold))
+    for (sid, acc, z), score in totals.items():
+        by_study.setdefault((sid, acc), []).append((z, score))
     return by_study, boxes, nz_of
 
 
@@ -150,9 +159,9 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--data", required=True, help="preprocessing output folder")
     p.add_argument("--out", required=True, help="Folder for slices.csv and boxes.csv")
-    p.add_argument("--weights", default=str(ROOT / "weights"), help="Folder with maxvit/ and detector/")
+    p.add_argument("--weights", required=True, help="Folder with maxvit/ and detector/ checkpoints. Not shipped with this folder.")
     p.add_argument("--subjects", nargs="*", default=None)
-    p.add_argument("--batch", type=int, default=8, help="MaxViT slices per forward")
+    p.add_argument("--batch", type=int, default=2, help="MaxViT slices per forward (each slice is five views)")
     p.add_argument("--detector-batch", type=int, default=1, help="Detector slices per forward")
     p.add_argument("--stride", type=int, default=1, help="Score every Nth slice")
     p.add_argument("--n-folds", type=int, default=0, help="First N checkpoints. 0 uses all")

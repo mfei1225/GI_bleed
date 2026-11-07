@@ -1,6 +1,12 @@
-"""Build a 9-channel slice and return every detection."""
+"""Build a 15-channel slice and return every detection.
+
+Each phase contributes five slices at −2, −1, 0, +1, +2 mm, chosen from
+``ipp_map.json`` axial positions. If that map is missing, the same offsets
+are slice indices.
+"""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +15,8 @@ import torch
 from detector_model import build_detector
 
 SIZE = 512
+OFFSETS = (-2, -1, 0, 1, 2)
+STEP_MM = 1.0
 
 
 def load_detector(path: Path, device: torch.device):
@@ -55,20 +63,44 @@ def _at(vol: list[np.ndarray] | None, z: int, shape: tuple[int, int]) -> np.ndar
     return np.asarray(vol[z], dtype=np.float32)
 
 
-def slice_tensor(vols: dict, z: int):
-    """Return the 9-channel model input and how to map boxes back to the slice.
+def axial_mm(study: Path) -> np.ndarray | None:
+    """Registered axial positions, millimetres, one entry per venous slice."""
+    path = Path(study) / "ipp_map.json"
+    if not path.is_file():
+        return None
+    axial = json.loads(path.read_text()).get("axial_positions_mm")
+    if not axial:
+        return None
+    return np.asarray(axial, dtype=np.float64)
 
-    Boxes come back in the 512×512 image. ``geom`` undoes the body crop, the
-    square pad, and the resize, into pixels of the original venous slice.
+
+def neighbor_z(axial: np.ndarray | None, z: int, offset: int, nz: int, step_mm: float = STEP_MM) -> int:
+    """Slice index nearest to ``z + offset * step_mm`` in the volume's own direction."""
+    z = int(np.clip(int(z), 0, max(nz - 1, 0)))
+    if offset == 0 or axial is None or len(axial) != nz or nz <= 1 or step_mm <= 0:
+        return int(np.clip(z + int(offset), 0, max(nz - 1, 0)))
+    sgn = 1.0 if float(np.median(np.diff(axial))) >= 0.0 else -1.0
+    target = float(axial[z]) + float(offset) * float(step_mm) * sgn
+    return int(np.argmin(np.abs(axial - target)))
+
+
+def slice_tensor(vols: dict, z: int, axial: np.ndarray | None = None):
+    """Return the 15-channel model input and how to map boxes back to the slice.
+
+    Channel order is venous (−2..+2 mm), non-contrast (−2..+2 mm), arterial
+    (−2..+2 mm). Boxes come back in the 512×512 image. ``geom`` undoes the
+    body crop, the square pad, and the resize, into pixels of the original
+    venous slice.
     """
     import cv2
 
     venous = vols["Venous"]
     shape = venous[0].shape[:2]
+    nz = len(venous)
     channels = []
     for phase in ("Venous", "NonCon", "Arterial"):
-        for dz in (0, -1, 1):
-            channels.append(_at(vols[phase], z + dz, shape))
+        for dz in OFFSETS:
+            channels.append(_at(vols[phase], neighbor_z(axial, z, dz, nz), shape))
     y0, x0 = 0, 0
     mask = channels[0] > 0
     if mask.any():

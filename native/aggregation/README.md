@@ -31,7 +31,7 @@ A few high slices raise the score. A long stack of low slices does not. If a stu
 **Blend.** Rank both patient scores inside this file. Rank 1 is the lowest score and rank n is the highest.
 
 ```
-blend_rank  = 0.6 * rank(MaxViT) + 0.4 * rank(detector)
+blend_rank  = 0.7 * rank(MaxViT) + 0.3 * rank(detector)
 blend_score = blend_rank / number of studies
 ```
 
@@ -41,7 +41,7 @@ There is no yes/no cutoff in this folder. Higher means the study ranks higher in
 
 ## Input
 
-`scores_slices.csv` from `inference`:
+`slices.csv` inside the results folder from `inference`:
 
 | Column | Meaning |
 |---|---|
@@ -64,14 +64,13 @@ There is no yes/no cutoff in this folder. Higher means the study ranks higher in
 
 ```bash
 python aggregate.py \
-  --slices /data/site/scores_slices.csv \
-  --gi /data/site/preprocessed/gi_occupancy.json \
-  --out /data/site/scores.csv
+  --results /data/site/results \
+  --gi /data/site/preprocessed/gi_occupancy.json
 ```
 
 ## Output
 
-`scores.csv`, one row per study:
+`scores.csv` is written into that same results folder. One row per study:
 
 | Column | Meaning |
 |---|---|
@@ -83,5 +82,5 @@ python aggregate.py \
 | `maxvit_max_slice` | Highest MaxViT slice probability |
 | `maxvit_score` | Noisy-OR of the top 8 |
 | `detector_score` | Mean of detector slice scores above 0.1 |
-| `blend_rank` | 0.6 MaxViT rank + 0.4 detector rank |
+| `blend_rank` | 0.7 MaxViT rank + 0.3 detector rank |
 | `blend_score` | `blend_rank` divided by the number of studies |

@@ -2,29 +2,12 @@
 
 This folder scores a study that has already been through `preprocessing`. It writes one row per slice. Patient scores are computed by `aggregation`. It does not register, segment, or train.
 
-The checkpoints are not in git. Download them from [mfei1225/gi-bleed-weights](https://huggingface.co/mfei1225/gi-bleed-weights) into this folder:
-
-```bash
-pip install "huggingface_hub>=0.15"
-python - <<'PY'
-from huggingface_hub import snapshot_download
-snapshot_download(
-    repo_id="mfei1225/gi-bleed-weights",
-    repo_type="model",
-    local_dir="weights",
-    local_dir_use_symlinks=False,
-)
-PY
-```
-
-That produces:
+The weights are not included. Pass `--weights` to a folder laid out like this:
 
 ```
-weights/maxvit/maxvit_fold0.pth … maxvit_fold4.pth      (~117 MB each)
-weights/detector/detector_fold0.pth … detector_fold4.pth (~466 MB each)
+weights/maxvit/      five MaxViT fold checkpoints, *.pth
+weights/detector/    five Faster R-CNN fold checkpoints, *.pth
 ```
-
-Inference loads every `*.pth` in each folder in sorted order (fold 0–4).
 
 ```bash
 pip install -r requirements.txt
@@ -38,29 +21,31 @@ Two models score every axial slice. This folder saves those slice scores. `aggre
 
 ### MaxViT
 
-One axial slice at a time, `maxvit_tiny_tf_512` at 512×512. The three channels are the non-contrast difference used in training:
+`maxvit_tiny_tf_512` at 512×512, run on five difference views and fused by a Linear(5, 1). The views are the same three-channel non-contrast difference at −2, −1, 0, +1, and +2 mm:
 
 - channel 0 = (venous − non-contrast + 1) / 2
 - channel 1 = venous
 - channel 2 = (arterial − non-contrast + 1) / 2
 
+The five views are concatenated in that offset order, so the tensor is 15 channels. Which slice is 1 mm away comes from `slices/<Subject>/<Accession>/ipp_map.json` (`axial_positions_mm`). If that file is missing, the offsets are slice indexes. The center view is always the slice being scored. The ends of the volume repeat the last available slice.
+
 Pixel values are the soft-tissue window, scaled to [0, 1]. Mid-gray on a difference channel means that phase looks like non-contrast. If non-contrast or arterial is missing, that difference channel is zero.
 
-The network is an 11-class CT injury head. The bleed score is class 1 (extravasation), after a sigmoid. The five fold checkpoints are averaged. Each scored slice keeps that probability. Turning the slices into one patient number is done in `aggregation`.
+The network is an 11-class CT injury head. Each view emits class 1 (extravasation). The fuse turns those five logits into one logit, then a sigmoid. The five fold checkpoints are averaged. Each scored slice keeps that probability. Turning the slices into one patient number is done in `aggregation`.
 
 ### Detector
 
-Faster R-CNN with a ResNet-50 feature pyramid. Nine channels, in this order:
+Faster R-CNN with a ResNet-50 feature pyramid. Fifteen channels, five slices per phase, in this order:
 
 ```
-venous z, venous z-1, venous z+1,
-noncontrast z, noncontrast z-1, noncontrast z+1,
-arterial z, arterial z-1, arterial z+1
+venous −2 mm, −1 mm, 0, +1 mm, +2 mm,
+noncontrast −2 mm, −1 mm, 0, +1 mm, +2 mm,
+arterial −2 mm, −1 mm, 0, +1 mm, +2 mm
 ```
 
-Each channel is the same soft-tissue window. The body is cropped from the venous slice, that crop is applied to every channel, the result is padded to a square, and then resized to 512. Differences between phases are computed inside the network (venous−noncontrast, arterial−noncontrast, arterial−venous).
+Neighbors use the same `ipp_map.json` rule as the MaxViT. Each channel is the same soft-tissue window. The body is cropped from the venous center slice, that crop is applied to every channel, the result is padded to a square, and then resized to 512. Differences between phases are computed inside the network (venous−noncontrast, arterial−noncontrast, arterial−venous).
 
-Every box the model keeps is saved. Boxes scoring below 0.1 are already dropped. A slice score, used later for the patient number, is still the highest box score on that slice, averaged over the five folds.
+Every box the model keeps is saved. Boxes scoring below 0.1 are already dropped. A slice score, used later for the patient number, is the highest box score on that slice. Across the five folds, the slice keeps the maximum of those scores.
 
 The detector reads `slices/`, not the volume cache. The cache is already resized to 512 without the body crop, so it is the wrong input for this model.
 
@@ -79,6 +64,7 @@ Point `--data` at the preprocessing output:
       Venous/0000.dcm
       NonCon/0000.dcm
       Arterial/0000.dcm
+      ipp_map.json
 ```
 
 Each `.npy` is `uint8`, shape `(nz, 512, 512)`. 0 is −160 HU or lower, 255 is 240 HU or higher. The MaxViT divides by 255.
@@ -90,18 +76,19 @@ Preprocess first, then:
 ```bash
 python infer.py \
   --data /data/site/preprocessed \
+  --weights /data/site/weights \
   --out /data/site/results
 ```
 
-The weights next to this script are used unless you pass `--weights` pointing at a folder that contains `maxvit/` and `detector/`. Pass `--subjects` to score a few ids.
+`--weights` is required. It must contain `maxvit/` and `detector/`, each with the five fold checkpoints. Pass `--subjects` to score a few ids.
 
 ## Speed
 
-Defaults match the full run: every slice, all five folds, both models, MaxViT batches of 8, detector batches of 1. On a GPU the forward pass uses fp16. These flags change that:
+Defaults match the full run: every slice, all five folds, both models, MaxViT batches of 2, detector batches of 1. On a GPU the forward pass uses fp16. These flags change that:
 
 | Flag | Default | What to raise |
 |---|---|---|
-| `--batch` | 8 | MaxViT slices per forward. Try 16 or 32 on a 40 GB GPU |
+| `--batch` | 2 | MaxViT slices per forward. Each slice is five views |
 | `--detector-batch` | 1 | Detector slices per forward. This is the slow one. Try 4, then 8 |
 | `--stride` | 1 | `2` scores every other slice |
 | `--n-folds` | all | `1` loads only the first checkpoint |
@@ -131,7 +118,7 @@ results/
 | `nz` | Slices in the venous volume |
 | `z` | Slice index, the same index as `0000.dcm` |
 | `maxvit_prob` | Fold-averaged MaxViT extravasation probability |
-| `detector_score` | Fold-averaged highest box score on that slice |
+| `detector_score` | Highest box score on that slice, taking the maximum across folds |
 
 `boxes.csv` has one row per detection:
 

@@ -16,7 +16,7 @@ One study often has three axial series acquired at different times: non-contrast
 
 1. **Register.** Pick one series as the fixed reference and leave it untransformed. Rigidly, then affinely, register the other phases onto that grid with Mattes mutual information (SimpleITK Euler3D, then affine). Write one compressed NIfTI per phase. Pixel values stay Hounsfield units, stored as int16.
 2. **Export slices.** Split each NIfTI into one DICOM per axial slice so a slice loader can read them. `RescaleSlope` is 1 and `RescaleIntercept` is 0, so the stored pixels are already HU. Every phase of a study shares the reference slice positions.
-3. **Segment.** TotalSegmentator (`total` task) runs on the registered `Venous.nii.gz` only. Masks are written per organ. The bowel masks (colon, small bowel, duodenum, stomach, esophagus) become a per-slice GI flag: a slice counts as GI when any of those organs has at least 50 voxels. Patient scoring keeps GI slices and drops the rest. If a subject has no masks, every slice is kept.
+3. **Segment.** TotalSegmentator (`total` task) runs on the registered `Venous.nii.gz` only. Masks are written per organ. The bowel masks (colon, small bowel, duodenum, stomach, esophagus) become a per-slice GI flag: a slice counts as GI when any of those organs has at least 50 voxels. If a mask was made on a coarser grid than the venous volume, it is resampled onto that venous grid with nearest neighbors before the voxels are counted, so slice `0040.dcm` is the same anatomy in the mask and in the image. Patient scoring keeps GI slices and drops the rest. If a subject has no masks, every slice is kept.
 4. **Cache (optional).** Soft-tissue window each slice (center 40 HU, width 400 HU, display range −160 to 240), pad to a square, resize, and save a uint8 NumPy volume. Inference reads this cache when it is present, and otherwise windows the slice DICOMs the same way on the fly.
 
 There is no label map for a new site. Series are grouped into thick and thin reconstructions using DICOM `SliceThickness` (0.625 mm and 1.25 mm stay in one family; 1.25 mm and 5 mm split). If the thickness tags are missing or all the same, groups are split by slice count instead (a jump of about 1.8× starts a new group). A group is used only when that same reconstruction has all three phases: venous (delayed only if that group has no venous), non-contrast, and arterial, each with at least 10 DICOM files. A thin venous series is not paired with a thick non-contrast series. If both the thick group and the thin group are complete, the one with more venous slices is kept. Non-contrast still prefers a true without-contrast series over a virtual non-contrast (`VNC`, `VUE`, water maps) inside the chosen group.
@@ -194,7 +194,7 @@ Shared by all phases of that study.
 | `origin_xyz_lps` | Origin of the reference volume. |
 | `direction_9` | 3×3 direction matrix, row-major. |
 | `slice_normal_xyz` | Unit normal of the axial plane. |
-| `axial_positions_mm` | Length `nz`. Position of each slice along that normal, in mm. |
+| `axial_positions_mm` | Length `nz`. Position of each slice along that normal, in mm. Inference and training pick the five slices at −2, −1, 0, +1, +2 mm from this list. |
 | `present_phases` | Phases that were exported. |
 
 ### Slice DICOM
@@ -217,7 +217,7 @@ Minimal secondary-capture header plus the registered pixels:
 
 ### `gi_occupancy.json`
 
-One object per subject. `gi_z` is the slice indexes to keep (the same index as `0000.dcm`). `z0` is 0. `n_gi` is the length of `gi_z`.
+One object per subject. `gi_z` is the slice indexes to keep (the same index as `0000.dcm`), after any coarser organ mask has been resampled onto the venous volume. `z0` is 0. `n_gi` is the length of `gi_z`.
 
 ### What inference still does, and what it does not
 
@@ -226,7 +226,7 @@ Nothing else is written to disk before a study is scored.
 At score time the loader only:
 
 - reads the uint8 cache (or windows the slice DICOM the same way),
-- stacks channels in memory from those three phases (the difference slab, or the raw phases with adjacent slices, depending on which model is loaded),
+- stacks five views at −2, −1, 0, +1, +2 mm, using `axial_positions_mm` in `ipp_map.json` (the MaxViT difference slab, or the detector’s raw phases),
 - drops slices whose z is absent from `gi_z` when that subject is in `gi_occupancy.json`.
 
 There is no lung crop, no extra normalization, and no histogram matching.

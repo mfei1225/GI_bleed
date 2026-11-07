@@ -2,14 +2,14 @@
 
 End-to-end GI-bleed CT scoring pipeline in three steps. There are two versions, each with its own `preprocessing/`, `inference/`, and `aggregation/`:
 
-| Folder | Slice context | Rank blend |
-|---|---|---|
-| `native/` | adjacent slices at the series' own spacing (z−1, z, z+1) | 0.6 MaxViT / 0.4 detector |
-| `standardized/` | five slices at −2, −1, 0, +1, +2 mm | 0.7 MaxViT / 0.3 detector |
+| Folder | Slice context | Detector slice score | Rank blend |
+|---|---|---|---|
+| `native/` | five slices at −2, −1, 0, +1, +2 mm | maximum across folds | 0.7 MaxViT / 0.3 detector |
+| `standardized/` | five slices at −2, −1, 0, +1, +2 mm | mean across folds | 0.7 MaxViT / 0.3 detector |
 
-Both versions still segment the venous volume and write `gi_occupancy.json`. `standardized/` preprocessing keeps the reference series grid and records each slice position in `ipp_map.json`. It does not resample the volume onto a new grid. Inference then reads the slices nearest to −2, −1, 0, +1, and +2 mm.
+Both versions still segment the venous volume and write `gi_occupancy.json`. Preprocessing keeps the reference series grid and records each slice position in `ipp_map.json`. Inference reads the slices nearest to −2, −1, 0, +1, and +2 mm. In `native/`, a segmentation mask on a coarser grid is resampled onto the venous slices before the GI mask is built.
 
-The diagram and commands below are for `native/`. `standardized/` follows the same steps, but `aggregate.py` takes `--results` and writes `scores.csv` into that folder. See each folder's `README.md`.
+The diagram and commands below are for `native/`. `standardized/` uses the same commands, and its `infer.py` reads `standardized/inference/weights/` unless you pass `--weights`. See each folder's `README.md`.
 
 ```
 raw multiphase CT
@@ -25,7 +25,7 @@ raw multiphase CT
 ┌───────────────────┐
 │   inference/      │  MaxViT + Faster R-CNN score every axial slice
 └─────────┬─────────┘
-          │  scores_slices.csv
+          │  results/slices.csv  results/boxes.csv
           ▼
 ┌───────────────────┐
 │  aggregation/     │  keep GI slices; MaxViT noisy-OR + detector mean → blend_score
@@ -39,47 +39,34 @@ raw multiphase CT
 
 1. **preprocessing** puts all phases on one grid and marks which slices are GI tract. Downstream models assume that layout (`volcache/s512`, `slices/`, `gi_occupancy.json`).
 2. **inference** only scores slices. It does not decide the patient number; MaxViT and the detector write per-slice probabilities/boxes.
-3. **aggregation** applies the locked patient rules (GI filter, top-8 noisy-OR for MaxViT, mean of detector scores > 0.1, 0.6/0.4 rank blend). That keeps scoring reproducible and separate from the GPU step.
+3. **aggregation** applies the patient rules (GI filter, top-8 noisy-OR for MaxViT, mean of detector scores > 0.1, 0.7/0.3 rank blend). That keeps scoring reproducible and separate from the GPU step.
 
 ## Quick start
 
 ```bash
 # 1) preprocess
 cd native/preprocessing && pip install -r requirements.txt
-python run_preprocess.py --image_root ... --series_csv ... --out_root /data/site/preprocessed
+python run_preprocess.py --image_root ... --series_csv ... --out /data/site/preprocessed
 
-# 2) infer (GPU). Checkpoints are not in git; download them first (see below).
+# 2) infer (GPU). Pass the checkpoint folder; it is not in git.
 cd ../inference && pip install -r requirements.txt
-python infer.py --data /data/site/preprocessed --out /data/site/scores_slices.csv
+python infer.py \
+  --data /data/site/preprocessed \
+  --weights /data/site/weights \
+  --out /data/site/results
 
 # 3) aggregate
 cd ../aggregation && pip install -r requirements.txt
 python aggregate.py \
-  --slices /data/site/scores_slices.csv \
-  --gi /data/site/preprocessed/gi_occupancy.json \
-  --out /data/site/scores.csv
+  --results /data/site/results \
+  --gi /data/site/preprocessed/gi_occupancy.json
 ```
 
 See each folder’s `README.md` for inputs, flags, and output columns.
 
 ## Weights
 
-Checkpoints are not in git. Download them from [mfei1225/gi-bleed-weights](https://huggingface.co/mfei1225/gi-bleed-weights). From this directory:
-
-```bash
-pip install "huggingface_hub>=0.15"
-python - <<'PY'
-from huggingface_hub import snapshot_download
-snapshot_download(
-    repo_id="mfei1225/gi-bleed-weights",
-    repo_type="model",
-    local_dir="native/inference/weights",
-    local_dir_use_symlinks=False,
-)
-PY
-```
-
-That writes `native/inference/weights/maxvit/` and `native/inference/weights/detector/`, which is where `infer.py` looks. The `standardized/` checkpoints go in `standardized/inference/weights/`.
+Checkpoints are not in git. `native/inference/infer.py` requires `--weights`, a folder with `maxvit/` and `detector/` inside it. `standardized/inference/infer.py` uses `standardized/inference/weights/` unless you pass `--weights`.
 
 ## Report labels
 
