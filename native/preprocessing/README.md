@@ -1,4 +1,6 @@
-# Multi-phase CT preprocessing
+# Multi-phase CT preprocessing (1 mm neighbors)
+
+The registered volumes stay on the acquired slice spacing. They are not resampled onto a 1 mm grid. `ipp_map.json` records each slice position in millimetres. Inference and training then take the acquired slice nearest to −2, −1, 0, +1, and +2 mm.
 
 This folder registers a contrast-phase CT study into one coordinate system, segments the venous volume, writes one DICOM per axial slice, and optionally bakes a windowed volume cache.
 

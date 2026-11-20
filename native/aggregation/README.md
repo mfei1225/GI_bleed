@@ -26,7 +26,7 @@ The locked patient rules, applied to those GI slices, are:
 
 A few high slices raise the score. A long stack of low slices does not. If a study has fewer than 8 slices, every slice is used.
 
-**Detector.** Mean of the slice scores that are above 0.1. Slices at or below 0.1 are left out. If none are above 0.1, the patient score is 0.
+**Detector.** Mean of the 5 highest slice scores. If a study has fewer than 5 GI slices, every slice is used.
 
 **Blend.** Rank both patient scores inside this file. Rank 1 is the lowest score and rank n is the highest.
 
@@ -81,6 +81,6 @@ python aggregate.py \
 | `gi_z` | Those slice indexes, same index as `0000.dcm` |
 | `maxvit_max_slice` | Highest MaxViT slice probability |
 | `maxvit_score` | Noisy-OR of the top 8 |
-| `detector_score` | Mean of detector slice scores above 0.1 |
+| `detector_score` | Mean of the 5 highest detector slice scores |
 | `blend_rank` | 0.7 MaxViT rank + 0.3 detector rank |
 | `blend_score` | `blend_rank` divided by the number of studies |

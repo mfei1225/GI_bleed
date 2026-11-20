@@ -39,7 +39,7 @@ raw multiphase CT
 
 1. **preprocessing** puts all phases on one grid and marks which slices are GI tract. Downstream models assume that layout (`volcache/s512`, `slices/`, `gi_occupancy.json`).
 2. **inference** only scores slices. It does not decide the patient number; MaxViT and the detector write per-slice probabilities/boxes.
-3. **aggregation** applies the patient rules (GI filter, top-8 noisy-OR for MaxViT, mean of detector scores > 0.1, 0.7/0.3 rank blend). That keeps scoring reproducible and separate from the GPU step.
+3. **aggregation** applies the patient rules. Both versions use the GI filter, a top-8 noisy-OR for MaxViT, and a 0.7/0.3 rank blend. In `native/`, the detector patient score is the mean of the 5 highest GI slice scores. In `standardized/`, it is the mean of detector scores above 0.1. That keeps scoring reproducible and separate from the GPU step.
 
 ## Quick start
 
