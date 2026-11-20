@@ -1,6 +1,7 @@
-"""Series catalog and path helpers.
+"""Series catalog and path helpers for a new-site preprocessing run.
 
-Paths and subject ids come from ``--image_root`` and ``--series_csv``.
+Replaces the MGB-specific imports in register_and_cache.py / extract_registered_slices.py
+(boundingboxDataset.PHASES_CSV, image root, subject-id normalization).
 """
 from __future__ import annotations
 

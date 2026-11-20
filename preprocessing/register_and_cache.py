@@ -157,8 +157,8 @@ def _best_scan_for_phase(subject, accession, sub, phase, min_files=10, allowed_s
 
     Requires n_files >= min_files and the folder to exist on disk. Returns (None, -1).
 
-    For NonCon, prefer true WO folders over dual-energy VNC (a VNC series is often
-    listed in the catalog but missing on disk). Within a preference
+    For NonCon, prefer true WO folders over dual-energy VNC (VNC is frequently
+    catalogued in phase.csv but never copied into MGB-img). Within a preference
     tier, pick the densest series. ``allowed_scans`` limits the choice to one
     thick/thin group.
     """

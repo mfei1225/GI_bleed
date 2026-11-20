@@ -84,11 +84,11 @@ python infer.py \
 
 ## Speed
 
-Defaults match the full run: every slice, all five folds, both models, MaxViT batches of 2, detector batches of 1. On a GPU the forward pass uses fp16. These flags change that:
+Defaults match the full run: every slice, all five folds, both models, MaxViT batches of 8, detector batches of 1. On a GPU the forward pass uses fp16. These flags change that:
 
 | Flag | Default | What to raise |
 |---|---|---|
-| `--batch` | 2 | MaxViT slices per forward. Each slice is five views |
+| `--batch` | 8 | MaxViT slices per forward. Try 16 or 32 on a 40 GB GPU |
 | `--detector-batch` | 1 | Detector slices per forward. This is the slow one. Try 4, then 8 |
 | `--stride` | 1 | `2` scores every other slice |
 | `--n-folds` | all | `1` loads only the first checkpoint |

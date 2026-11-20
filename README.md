@@ -1,73 +1,23 @@
-# GI_bleed
+# GI-bleed share, 1 mm neighbors
 
-End-to-end GI-bleed CT scoring pipeline in three steps. There are two versions, each with its own `preprocessing/`, `inference/`, and `aggregation/`:
+This folder is the sendable pipeline for the 1 mm, 5-slice models. Copy the whole folder. The weights are not included.
 
-| Folder | Slice context | Detector slice score | Rank blend |
-|---|---|---|---|
-| `native/` | five slices at −2, −1, 0, +1, +2 mm | maximum across folds | 0.7 MaxViT / 0.3 detector |
-| `standardized/` | five slices at −2, −1, 0, +1, +2 mm | mean across folds | 0.7 MaxViT / 0.3 detector |
-
-Both versions still segment the venous volume and write `gi_occupancy.json`. Preprocessing keeps the reference series grid and records each slice position in `ipp_map.json`. Inference reads the slices nearest to −2, −1, 0, +1, and +2 mm. In `native/`, a segmentation mask on a coarser grid is resampled onto the venous slices before the GI mask is built.
-
-The diagram and commands below are for `native/`. `standardized/` uses the same commands, and its `infer.py` reads `standardized/inference/weights/` unless you pass `--weights`. See each folder's `README.md`.
+The volumes are not resampled to 1 mm. Preprocessing keeps each study on the acquired axial grid and writes the slice position, in millimetres, to `ipp_map.json`. Inference and training pick the acquired slice nearest to −2, −1, 0, +1, and +2 mm. The ends of a volume repeat the last available slice. A missing position map falls back to neighboring slice indexes.
 
 ```
-raw multiphase CT
-        │
-        ▼
-┌───────────────────┐
-│  preprocessing/   │  register NonCon / Arterial / Venous, export slices,
-│                   │  segment venous GI tract, write volcache + gi_occupancy.json
-└─────────┬─────────┘
-          │  preprocessed/
-          │    slices/  volcache/s512/  gi_occupancy.json
-          ▼
-┌───────────────────┐
-│   inference/      │  MaxViT + Faster R-CNN score every axial slice
-└─────────┬─────────┘
-          │  results/slices.csv  results/boxes.csv
-          ▼
-┌───────────────────┐
-│  aggregation/     │  keep GI slices; MaxViT noisy-OR + detector mean → blend_score
-└─────────┬─────────┘
-          │
-          ▼
-     scores.csv (one row per study)
+preprocessing/   register, segment, export slices, GI occupancy, optional volume cache
+inference/       MaxViT and detector slice scores
+aggregation/     one score per study
 ```
 
-## Why this order
+Run them in that order. Each subfolder has its own README and requirements.
 
-1. **preprocessing** puts all phases on one grid and marks which slices are GI tract. Downstream models assume that layout (`volcache/s512`, `slices/`, `gi_occupancy.json`).
-2. **inference** only scores slices. It does not decide the patient number; MaxViT and the detector write per-slice probabilities/boxes.
-3. **aggregation** applies the patient rules. Both versions use the GI filter, a top-8 noisy-OR for MaxViT, and a 0.7/0.3 rank blend. In `native/`, the detector patient score is the mean of the 5 highest GI slice scores. In `standardized/`, it is the mean of detector scores above 0.1. That keeps scoring reproducible and separate from the GPU step.
+## Patient score
 
-## Quick start
+GI slices are those where colon, small bowel, duodenum, stomach, or esophagus has at least 50 voxels. A coarser organ mask is resampled onto the venous volume before that count, so the slice index matches `0000.dcm`. A subject with no mask keeps every slice.
 
-```bash
-# 1) preprocess
-cd native/preprocessing && pip install -r requirements.txt
-python run_preprocess.py --image_root ... --series_csv ... --out /data/site/preprocessed
+- MaxViT: noisy-OR of the top 8 GI slice probabilities.
+- Detector: mean of the 5 highest GI slice scores. This is the rule with the highest detector AUC on the 1 mm training out-of-fold scores.
+- Blend: `0.7 * rank(MaxViT) + 0.3 * rank(detector)`, then divided by the number of studies. Rank 1 is the lowest score in that file.
 
-# 2) infer (GPU). Pass the checkpoint folder; it is not in git.
-cd ../inference && pip install -r requirements.txt
-python infer.py \
-  --data /data/site/preprocessed \
-  --weights /data/site/weights \
-  --out /data/site/results
-
-# 3) aggregate
-cd ../aggregation && pip install -r requirements.txt
-python aggregate.py \
-  --results /data/site/results \
-  --gi /data/site/preprocessed/gi_occupancy.json
-```
-
-See each folder’s `README.md` for inputs, flags, and output columns.
-
-## Weights
-
-Checkpoints are not in git. `native/inference/infer.py` requires `--weights`, a folder with `maxvit/` and `detector/` inside it. `standardized/inference/infer.py` uses `standardized/inference/weights/` unless you pass `--weights`.
-
-## Report labels
-
-`llm_labeling/` labels report text (injury and bleed site). It does not read images. See `llm_labeling/README.md`.
+The earlier share still uses the mean of detector slices above 0.1. This folder does not.

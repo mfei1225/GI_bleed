@@ -23,7 +23,7 @@ import tempfile
 import time
 from pathlib import Path
 
-# Organs kept from the TotalSegmentator "total" task. Inference reads the bowel masks.
+# Same subset as scripts/totalseg/run_totalseg_subject.py.
 GI_FILT_ROIS = [
     "liver", "spleen", "kidney_left", "kidney_right",
     "kidney_cyst_left", "kidney_cyst_right",
