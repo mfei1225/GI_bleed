@@ -7,8 +7,8 @@ small bowel, duodenum, stomach, or esophagus has at least 50 voxels. A
 subject missing from that file keeps every slice.
 
 MaxViT is the noisy-OR of the top 8 GI slice probabilities. The detector
-score is the mean of the 5 highest GI slice scores. The blend is 0.7 times
-the MaxViT rank plus 0.3 times the detector rank, divided by the number of
+score is the mean of the 10 highest GI slice scores. The blend is 0.4 times
+the MaxViT rank plus 0.6 times the detector rank, divided by the number of
 studies. Rank 1 is the lowest score in this file.
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ def _noisy_or(scores: list[float]) -> float:
     return float(1.0 - np.prod(1.0 - s))
 
 
-def _topk_mean(scores: list[float], k: int = 5) -> float:
+def _topk_mean(scores: list[float], k: int = 10) -> float:
     s = np.asarray(scores, dtype=np.float64)
     if s.size == 0:
         return 0.0
@@ -93,7 +93,7 @@ def main():
         rows = studies[key]["rows"]
         maxvit_scores.append(_noisy_or([m for _, m, _ in rows]))
         detector_scores.append(_topk_mean([d for _, _, d in rows]))
-    blend = 0.7 * _ranks(maxvit_scores) + 0.3 * _ranks(detector_scores)
+    blend = 0.4 * _ranks(maxvit_scores) + 0.6 * _ranks(detector_scores)
     n = float(len(keys))
 
     out = results / "scores.csv"
